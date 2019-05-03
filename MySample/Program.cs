@@ -35,19 +35,59 @@ namespace MySample
                     return;
                 }
 
-                var fileNames = Directory.EnumerateFiles(sourceFolderPath);
+                var finalResultFolder = ConfigurationManager.AppSettings["finalResultFolder"];
+                if (!Directory.Exists(finalResultFolder))
+                {
+                    Directory.CreateDirectory(finalResultFolder);
+                }
+
+                var fileNames = Directory.EnumerateFiles(sourceFolderPath,"*.zip", SearchOption.AllDirectories);
 
                 //2. read source CSV file
-                IEnumerable<EmpInfo> records;
+                List<EmpInfo> records;
                 using (var reader = new StreamReader(sourceCSVFile))
                 {
                     using (var csv = new CsvReader(reader))
                     {
-                        records = csv.GetRecords<EmpInfo>();
+                        csv.Configuration.HasHeaderRecord = true;
+                        records = csv.GetRecords<EmpInfo>().ToList();
                     }
                 }
-                Console.WriteLine(records.Count());
+                //Console.WriteLine(records.ToList().Count);
                 
+                // 3.
+                foreach(var file in fileNames)
+                {
+                    int fNumber;
+                    // convert file name to INT
+                    var fileNameOnly = Path.GetFileNameWithoutExtension(file);
+                    var fileExt = Path.GetExtension(file);
+                    bool fIsNumber = int.TryParse(fileNameOnly, out fNumber);
+                    if (fIsNumber)
+                    {
+                        var matchRecord = records.FirstOrDefault(r => r.ID == fNumber);
+                        if (matchRecord != null)
+                        {
+                            // found match record
+                            // first rename the file
+                            var newName = $"{matchRecord.LN}_{matchRecord.FN}_{matchRecord.ID}{fileExt}";
+                            File.Move(file, Path.Combine(finalResultFolder, newName));
+                            // Remove match item from list
+                            records.Remove(matchRecord);
+                        }
+                    }
+                }
+
+                // dump records to a new file
+                using (var writer = new StreamWriter(Path.Combine(finalResultFolder, "Remaining.csv")))
+                {
+                    using (var csvWriter = new CsvWriter(writer))
+                    {
+                        csvWriter.Configuration.HasHeaderRecord = true;
+                        csvWriter.WriteRecords(records);
+                    }
+                }
+
                 //foreach (var fileName in fileNames)
                 //{
                 //    Console.WriteLine(fileName);
@@ -67,8 +107,8 @@ namespace MySample
 
     public class EmpInfo
     {
-        public string ID { get; set; }
-        public string FIRSTNAME { get; set; }
-        public string LASTNAME { get; set; }
+        public int ID { get; set; }
+        public string FN { get; set; }
+        public string LN { get; set; }
     }
 }
